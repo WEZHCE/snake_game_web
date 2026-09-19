@@ -1,5 +1,6 @@
 /* 贪吃蛇 v8.0 Web —— 页面外壳样式
-   游戏本身 1:1 复刻 Pygame 原版的 Canvas 绘制，这里只负责页面居中与画布自适应缩放 */
+   游戏本身 1:1 复刻 Pygame 原版的 Canvas 绘制，这里负责页面居中与画布自适应缩放：
+   保持 880:720 比例铺满视口，限制最大尺寸避免过度放大导致模糊 */
 html, body {
   height: 100%;
   margin: 0;
@@ -13,11 +14,14 @@ body {
   font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   -webkit-user-select: none;
   user-select: none;
+  background:
+    radial-gradient(1200px 700px at 50% 38%, rgba(64, 60, 120, 0.18), transparent 70%),
+    #05050d;
 }
 
 #wrap {
-  /* 保持 880:720 的窗口比例，尽可能铺满视口 */
-  width: min(100vw - 20px, calc((100vh - 20px) * 1.2222));
+  /* 保持 880:720 的窗口比例，尽可能铺满视口（上限 1360px 防止过度放大） */
+  width: min(100vw - 16px, calc((100vh - 16px) * 1.2222), 1360px);
 }
 
 #game {
@@ -28,4 +32,10 @@ body {
   box-shadow: 0 10px 60px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 255, 255, .06);
   cursor: default;
   touch-action: manipulation;
+}
+
+/* 小屏（手机竖屏）：贴边显示并减小圆角 */
+@media (max-width: 560px) {
+  #wrap { width: 100vw; }
+  #game { border-radius: 0; box-shadow: none; }
 }

@@ -68,12 +68,32 @@ function strokeRR(x, y, w, h, r, color, lw = 1) {
   ctx.stroke();
 }
 
-/** baseline='top' 对应 pygame 左上角 blit；'middle' 对应 center 定位 */
+/**
+ * 绘制文本。
+ * baseline='top'    对应 pygame 左上角 blit（em 盒顶部对齐）
+ * baseline='middle' 按墨迹包围盒垂直居中，与 pygame get_rect(center=...) 视觉一致
+ *                   （修复：Canvas 默认 em 中线与 CJK 字形中心不一致导致的文字偏移）
+ */
 export function text(str, size, color, x, y, { align = "left", baseline = "top" } = {}) {
   ctx.font = `${size}px ${FONT_STACK}`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
-  ctx.textBaseline = baseline === "top" ? "top" : "middle";
+  /* 关键：measureText 的墨迹盒是相对当前 textBaseline 计算的，
+     必须先固定为 alphabetic，否则会继承上一帧残留的基线导致居中错位 */
+  ctx.textBaseline = "alphabetic";
+  if (baseline === "middle") {
+    const m = ctx.measureText(str);
+    const a = m.actualBoundingBoxAscent || 0;
+    const d = m.actualBoundingBoxDescent || 0;
+    if (a + d > 0) {
+      ctx.fillText(str, x, y + (a - d) / 2);
+      return;
+    }
+    ctx.textBaseline = "middle";
+    ctx.fillText(str, x, y);
+    return;
+  }
+  ctx.textBaseline = "top";
   ctx.fillText(str, x, y);
 }
 
@@ -126,7 +146,7 @@ export function makeButton(o) {
       let fontSize = this.size;
       const tw = textWidth(t, fontSize);
       if (tw > this.w - 10) fontSize = Math.max(10, Math.floor(fontSize * (this.w - 10) / tw));
-      text(t, fontSize, tc, this.x + this.w / 2, this.y + this.h / 2 + 1, { align: "center" });
+      text(t, fontSize, tc, this.x + this.w / 2, this.y + this.h / 2, { align: "center", baseline: "middle" });
     },
   };
 }
@@ -345,7 +365,7 @@ export function drawGameField(game, daily) {
     const alpha = 1 - t;
     text(T(ft.textKey), 14, rgb(S.colors[ft.color], alpha),
       GRID_X + ft.cell[0] * CELL + CELL / 2,
-      GRID_Y + ft.cell[1] * CELL - 6 - t * 18, { align: "center" });
+      GRID_Y + ft.cell[1] * CELL - 6 - t * 18, { align: "center", baseline: "middle" });
   }
   game.floatTexts = game.floatTexts.filter((f) => now - f.born < f.life);
 }
@@ -361,7 +381,7 @@ export function drawPauseOverlay() {
   ctx.fillStyle = "rgba(0,0,0,0.706)";
   ctx.fillRect(GRID_X, GRID_Y, GRID_PX, GRID_PX);
   text(T("paused_label"), 54, C("TEXT_MAIN"),
-    GRID_X + GRID_PX / 2, GRID_Y + GRID_PX / 2, { align: "center" });
+    GRID_X + GRID_PX / 2, GRID_Y + GRID_PX / 2, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -373,16 +393,16 @@ export function drawMenu() {
     ctx.fillStyle = rgb(S.colors.BG_LIGHT, 4 / 255);
     ctx.fillRect(i, 0, 1, H);
   }
-  /* 标题（带投影） */
-  text(T("title"), 54, "rgba(0,0,0,0.118)", W / 2 + 2, 57, { align: "center" });
-  text(T("title"), 54, C("ACCENT"), W / 2, 55, { align: "center" });
-  text(T("subtitle"), 19, C("TEXT_DIM"), W / 2, 100, { align: "center" });
+  /* 标题（带投影，居中） */
+  text(T("title"), 54, "rgba(0,0,0,0.118)", W / 2 + 2, 57, { align: "center", baseline: "middle" });
+  text(T("title"), 54, C("ACCENT"), W / 2, 55, { align: "center", baseline: "middle" });
+  text(T("subtitle"), 19, C("TEXT_DIM"), W / 2, 100, { align: "center", baseline: "middle" });
 
   /* 速度选择卡片 */
   const sc = B.speedCard;
   fillRR(sc.x, sc.y, sc.w, sc.h, 10, C("PANEL_BG"));
   strokeRR(sc.x, sc.y, sc.w, sc.h, 10, C("PANEL_BORDER"), 1);
-  text(T("speed"), 19, C("TEXT_DIM"), W / 2, sc.y + 18, { align: "center" });
+  text(T("speed"), 19, C("TEXT_DIM"), W / 2, sc.y + 18, { align: "center", baseline: "middle" });
   for (const b of B.speedBtns) b.draw();
   B.mode.draw();
   B.edge.draw();
@@ -397,7 +417,7 @@ export function drawMenu() {
     `${T("max_endless")}:${fmtScore(S.stats.endless_high)}  ` +
     `${T("max_timed")}:${fmtScore(S.stats.timed_high)}  ` +
     `${T("games_played")}:${S.stats.games_played}`;
-  text(stText, 12, C("TEXT_MAIN"), W / 2, sr.y + 21, { align: "center" });
+  text(stText, 12, C("TEXT_MAIN"), W / 2, sr.y + 21, { align: "center", baseline: "middle" });
 
   B.shop.draw();
   B.skin.draw();
@@ -502,7 +522,7 @@ export function drawVsOver(vsGame) {
   if (vsGame.result === "win") { rt = T("vs_win"); rc = C("VS_PLAYER"); }
   else if (vsGame.result === "lose") { rt = T("vs_lose"); rc = C("VS_AI"); }
   else { rt = T("vs_draw"); rc = C("TEXT_DIM"); }
-  text(rt, 54, rc, W / 2, 70, { align: "center" });
+  text(rt, 54, rc, W / 2, 70, { align: "center", baseline: "middle" });
   strokeRR(W / 2 - 170, 100, 340, 100, 12, C("PANEL_BORDER"), 1);
   text(`${T("vs_player")}: ${vsGame.playerScore}`, 19, C("VS_PLAYER"), W / 2 - 150, 120);
   text(`${T("vs_ai")}: ${vsGame.ai ? vsGame.ai.score : 0}`, 19, C("VS_AI"), W / 2 - 150, 155);
@@ -521,8 +541,8 @@ export function drawGameOver(game) {
   }
   ctx.fillStyle = rgb(S.colors.OVERLAY);
   ctx.fillRect(0, 0, W, H);
-  text(T("game_over"), 54, "rgba(0,0,0,0.118)", W / 2 + 2, 72, { align: "center" });
-  text(T("game_over"), 54, C("ACCENT"), W / 2, 70, { align: "center" });
+  text(T("game_over"), 54, "rgba(0,0,0,0.118)", W / 2 + 2, 72, { align: "center", baseline: "middle" });
+  text(T("game_over"), 54, C("ACCENT"), W / 2, 70, { align: "center", baseline: "middle" });
 
   const cw = 380, ch = 120, cx = W / 2 - cw / 2, cy = 95;
   fillRR(cx, cy, cw, ch, 12, C("PANEL_BG"));
@@ -546,8 +566,8 @@ export function drawGameOver(game) {
    [T("total_score"), String(Math.floor(S.stats.total_score / SCORE_SCALE))],
   ].forEach(([l, v], i) => {
     const cc = cx + i * colW + colW / 2;
-    text(l, 12, C("TEXT_DIM"), cc, scy + 18, { align: "center" });
-    text(v, 19, C("TEXT_MAIN"), cc, scy + 48, { align: "center" });
+    text(l, 12, C("TEXT_DIM"), cc, scy + 18, { align: "center", baseline: "middle" });
+    text(v, 19, C("TEXT_MAIN"), cc, scy + 48, { align: "center", baseline: "middle" });
   });
 
   let ny = scy + 85;
@@ -557,15 +577,15 @@ export function drawGameOver(game) {
     const label = T("new_record");
     const wText = textWidth(label, 32);
     ctx.fillStyle = rgb(gc, 30 / 255);
-    ctx.fillRect(W / 2 - wText / 2 - 10, ny - 5, wText + 20, 32 + 10);
-    text(label, 32, rgb(gc), W / 2, ny, { align: "center" });
+    ctx.fillRect(W / 2 - wText / 2 - 10, ny - 21, wText + 20, 42);
+    text(label, 32, rgb(gc), W / 2, ny, { align: "center", baseline: "middle" });
     ny += 55;
   }
-  text(`${T("score_earned")}: +${fmtScore(S.currentScore)}`, 14, C("GREEN_BTN"), W / 2, ny, { align: "center" });
+  text(`${T("score_earned")}: +${fmtScore(S.currentScore)}`, 14, C("GREEN_BTN"), W / 2, ny, { align: "center", baseline: "middle" });
   ny += 25;
   const [lvl, prog, need] = xpToLevel(S.stats.xp || 0);
   const tier = getRankTier(lvl);
-  text(`${T("rank_level")}: ${lvl}  |  ${T("rank_xp")}: ${prog}/${need}`, 14, rgb(tier.color), W / 2, ny, { align: "center" });
+  text(`${T("rank_level")}: ${lvl}  |  ${T("rank_xp")}: ${prog}/${need}`, 14, rgb(tier.color), W / 2, ny, { align: "center", baseline: "middle" });
   ny += 30;
   B.goRestart.y = ny;
   B.goMenu.y = ny + 55;
@@ -590,7 +610,7 @@ export function drawScrollPopup(titleText, lines, id) {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(titleText, 32, C("ACCENT"), x + w / 2, y + 30, { align: "center" });
+  text(titleText, 32, C("ACCENT"), x + w / 2, y + 30, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 30, y + 60, w - 60, 1);
 
@@ -615,7 +635,7 @@ export function drawScrollPopup(titleText, lines, id) {
   });
   ctx.restore();
   if (maxScroll > 0) drawScrollbar(x + w - 14, y + 66, 8, visibleH, Math.min(offset, maxScroll), maxScroll, contentH, visibleH);
-  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center" });
+  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center", baseline: "middle" });
   return maxScroll;
 }
 
@@ -649,7 +669,7 @@ export function drawShopPopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("shop_title"), 32, C("SHOP_GOLD"), x + w / 2, y + 28, { align: "center" });
+  text(T("shop_title"), 32, C("SHOP_GOLD"), x + w / 2, y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 30, y + 58, w - 60, 1);
   text(T("exchange_rate"), 14, C("TEXT_DIM"), x + 40, y + 72);
@@ -667,8 +687,8 @@ export function drawShopPopup() {
     const cx = sx + i * (cw + cgap);
     fillRR(cx, cy, cw, chh, 10, C("PANEL_BG"));
     strokeRR(cx, cy, cw, chh, 10, C("PANEL_BORDER"), 1);
-    text(lb, 12, C("TEXT_DIM"), cx + cw / 2, cy + 18, { align: "center" });
-    text(vl, 32, cl, cx + cw / 2, cy + 50, { align: "center" });
+    text(lb, 12, C("TEXT_DIM"), cx + cw / 2, cy + 18, { align: "center", baseline: "middle" });
+    text(vl, 32, cl, cx + cw / 2, cy + 50, { align: "center", baseline: "middle" });
   });
 
   const iy = y + 200;
@@ -678,9 +698,9 @@ export function drawShopPopup() {
 
   B.eb.draw(); B.e10.draw(); B.e50.draw(); B.eall.draw();
   if (S.shopMsgTimer > 0) {
-    text(S.shopMsg, 14, C("GOLD"), x + w / 2, y + 365, { align: "center" });
+    text(S.shopMsg, 14, C("GOLD"), x + w / 2, y + 365, { align: "center", baseline: "middle" });
   }
-  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 14, { align: "center" });
+  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 14, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -715,7 +735,7 @@ export function drawSkinPopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("skin_title"), 32, C("ACCENT"), x + w / 2, y + 25, { align: "center" });
+  text(T("skin_title"), 32, C("ACCENT"), x + w / 2, y + 25, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 20, y + 55, w - 40, 1);
 
@@ -782,14 +802,14 @@ export function drawSkinPopup() {
     fillRR(cpx, cpy, crw, crh, 12, C("BG_MID"));
     strokeRR(cpx, cpy, crw, crh, 12, C("PANEL_BORDER"), 2);
     const nm = sk.name[S.lang] ?? sk.name.en;
-    text(T("confirm_buy", nm), 19, C("TEXT_MAIN"), cpx + crw / 2, cpy + 35, { align: "center" });
-    text(T("cost_pts", sk.price), 14, C("TEXT_DIM"), cpx + crw / 2, cpy + 65, { align: "center" });
+    text(T("confirm_buy", nm), 19, C("TEXT_MAIN"), cpx + crw / 2, cpy + 35, { align: "center", baseline: "middle" });
+    text(T("cost_pts", sk.price), 14, C("TEXT_DIM"), cpx + crw / 2, cpy + 65, { align: "center", baseline: "middle" });
     B.skinYes.x = cpx + crw / 2 - 90; B.skinYes.y = cpy + 89;
     B.skinNo.x = cpx + crw / 2 + 10; B.skinNo.y = cpy + 89;
     B.skinYes.draw();
     B.skinNo.draw();
   }
-  text(T("skin_hint"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center" });
+  text(T("skin_hint"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center", baseline: "middle" });
 }
 
 function rainbowColor(i, n, ms) {
@@ -839,7 +859,7 @@ export function drawMusicPopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("music_title"), 32, C("ACCENT"), x + w / 2, y + 28, { align: "center" });
+  text(T("music_title"), 32, C("ACCENT"), x + w / 2, y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 30, y + 58, w - 60, 1);
 
@@ -878,7 +898,7 @@ export function drawMusicPopup() {
     fillRR(t.x, ly, 6, lh, 3, C("SCROLL_BAR_BG"));
     fillRR(t.x, t.y, 6, t.h, 3, C("SCROLL_BAR"));
   }
-  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center" });
+  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -908,10 +928,10 @@ export function drawAchievements() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("achievements"), 32, C("GOLD"), x + w / 2, y + 28, { align: "center" });
+  text(T("achievements"), 32, C("GOLD"), x + w / 2, y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 20, y + 55, w - 40, 1);
-  text(`${S.unlockedAchievements.size}/${ACHIEVEMENTS.length}`, 19, C("TEXT_DIM"), x + w / 2, y + 72, { align: "center" });
+  text(`${S.unlockedAchievements.size}/${ACHIEVEMENTS.length}`, 19, C("TEXT_DIM"), x + w / 2, y + 72, { align: "center", baseline: "middle" });
 
   const listX = x + 20, listY = y + 85, listW = w - 40;
   const itemH = 50, gap = 4;
@@ -944,7 +964,7 @@ export function drawAchievements() {
     fillRR(t.x, listY, 6, visibleH, 3, C("SCROLL_BAR_BG"));
     fillRR(t.x, t.y, 6, t.h, 3, C("SCROLL_BAR"));
   }
-  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center" });
+  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -965,7 +985,7 @@ export function drawRankPanel() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("rank_title"), 32, C("GOLD"), x + w / 2, y + 28, { align: "center" });
+  text(T("rank_title"), 32, C("GOLD"), x + w / 2, y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 20, y + 55, w - 40, 1);
 
@@ -976,18 +996,18 @@ export function drawRankPanel() {
 
   const iconX = w / 2 - 40, iconY = y + 90;
   fillRR(x + iconX, iconY, 80, 50, 8, rgb(tier.color));
-  text(tierName, 19, "rgb(30,30,30)", x + w / 2, iconY + 25, { align: "center" });
-  text(`Lv.${level}`, 32, C("TEXT_MAIN"), x + w / 2, iconY + 80, { align: "center" });
+  text(tierName, 19, "rgb(30,30,30)", x + w / 2, iconY + 25, { align: "center", baseline: "middle" });
+  text(`Lv.${level}`, 32, C("TEXT_MAIN"), x + w / 2, iconY + 80, { align: "center", baseline: "middle" });
 
   const barX = x + 40, barY = iconY + 110, barW = w - 80, barH = 20;
   fillRR(barX, barY, barW, barH, 10, C("VOLUME_TRACK"));
   const fillW = Math.floor(barW * progress / Math.max(need, 1));
   if (fillW > 0) fillRR(barX, barY, fillW, barH, 10, rgb(tier.color));
-  text(T("rank_progress", progress, need), 14, C("TEXT_DIM"), x + w / 2, barY + 35, { align: "center" });
+  text(T("rank_progress", progress, need), 14, C("TEXT_DIM"), x + w / 2, barY + 35, { align: "center", baseline: "middle" });
 
   const streak = S.stats.xp_streak || 0;
   if (streak > 0) {
-    text(T("rank_streak", streak), 14, C("GOLD"), x + w / 2, barY + 55, { align: "center" });
+    text(T("rank_streak", streak), 14, C("GOLD"), x + w / 2, barY + 55, { align: "center", baseline: "middle" });
   }
 
   /* 段位里程碑（支持滚动，修复原版溢出被截断的问题） */
@@ -1006,7 +1026,7 @@ export function drawRankPanel() {
     fillRR(x + 30, by, 20, 20, 4, reached ? rgb(mc) : C("TEXT_DARK"));
     text(`Lv.${lv} ${T(nameKey)}`, 14, reached ? C("TEXT_MAIN") : C("TEXT_DIM"), x + 60, by + 2);
   });
-  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center" });
+  text(T("scroll_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -1020,7 +1040,7 @@ export function drawDailyInfo() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("daily_challenge"), 32, C("GREEN_BTN"), x + w / 2, y + 28, { align: "center" });
+  text(T("daily_challenge"), 32, C("GREEN_BTN"), x + w / 2, y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(x + 20, y + 55, w - 40, 1);
 
@@ -1045,7 +1065,7 @@ export function drawDailyInfo() {
     text(bt, 14, C("GOLD"), x + w - 30 - textWidth(bt, 14), y + 70);
   }
   B.dailyPlay.draw();
-  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center" });
+  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 12, { align: "center", baseline: "middle" });
 }
 
 export function drawDailyResult(score, isRecord, xpEarned) {
@@ -1055,11 +1075,11 @@ export function drawDailyResult(score, isRecord, xpEarned) {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, cw, chh, 16, C("BG_MID"));
   strokeRR(x, y, cw, chh, 16, C("PANEL_BORDER"), 2);
-  text(T("daily_result"), 32, C("GREEN_BTN"), x + cw / 2, y + 30, { align: "center" });
-  text(String(Math.floor(score / SCORE_SCALE)), 54, C("GOLD"), x + cw / 2, y + 80, { align: "center" });
-  if (isRecord) text(T("new_record"), 19, C("ACCENT"), x + cw / 2, y + 115, { align: "center" });
-  if (xpEarned > 0) text(T("daily_xp_bonus", xpEarned), 14, C("GOLD"), x + cw / 2, y + 145, { align: "center" });
-  text(T("click_close"), 12, C("TEXT_DARK"), x + cw / 2, y + chh - 15, { align: "center" });
+  text(T("daily_result"), 32, C("GREEN_BTN"), x + cw / 2, y + 30, { align: "center", baseline: "middle" });
+  text(String(Math.floor(score / SCORE_SCALE)), 54, C("GOLD"), x + cw / 2, y + 80, { align: "center", baseline: "middle" });
+  if (isRecord) text(T("new_record"), 19, C("ACCENT"), x + cw / 2, y + 115, { align: "center", baseline: "middle" });
+  if (xpEarned > 0) text(T("daily_xp_bonus", xpEarned), 14, C("GOLD"), x + cw / 2, y + 145, { align: "center", baseline: "middle" });
+  text(T("click_close"), 12, C("TEXT_DARK"), x + cw / 2, y + chh - 15, { align: "center", baseline: "middle" });
 }
 
 /* ============================================================
@@ -1081,15 +1101,15 @@ export function drawDifficultyPopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("diff_select"), 32, C("ACCENT"), x + w / 2, y + 30, { align: "center" });
+  text(T("diff_select"), 32, C("ACCENT"), x + w / 2, y + 30, { align: "center", baseline: "middle" });
   const colors = ["GREEN_BTN", "BLUE_BTN", "RED_BTN"];
   AI_DIFFICULTIES.forEach((diff, i) => {
     const r = difficultyRects()[i];
     fillRR(r.x, r.y, r.w, r.h, 8, C(colors[i]));
-    text(diff.name[S.lang] ?? diff.name.en, 19, C("TEXT_MAIN"), r.x + r.w / 2, r.y + r.h / 2 + 1, { align: "center" });
-    text(diff.desc[S.lang] ?? diff.desc.en, 14, C("TEXT_DIM"), x + w / 2, r.y + r.h + 12, { align: "center" });
+    text(diff.name[S.lang] ?? diff.name.en, 19, C("TEXT_MAIN"), r.x + r.w / 2, r.y + r.h / 2, { align: "center", baseline: "middle" });
+    text(diff.desc[S.lang] ?? diff.desc.en, 14, C("TEXT_DIM"), x + w / 2, r.y + r.h + 12, { align: "center", baseline: "middle" });
   });
-  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 20, { align: "center" });
+  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 20, { align: "center", baseline: "middle" });
 }
 
 export const LANG_RECT_PANEL = { x: 290, y: 240, w: 300, h: 240 };
@@ -1108,7 +1128,7 @@ export function drawLangPopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(x, y, w, h, 16, C("BG_MID"));
   strokeRR(x, y, w, h, 16, C("PANEL_BORDER"), 2);
-  text(T("lang_select"), 32, C("ACCENT"), x + w / 2, y + 30, { align: "center" });
+  text(T("lang_select"), 32, C("ACCENT"), x + w / 2, y + 30, { align: "center", baseline: "middle" });
   const names = { zh: "中文", en: "English", ja: "日本語" };
   const colors = ["GREEN_BTN", "BLUE_BTN", "PURPLE"];
   ["zh", "en", "ja"].forEach((lid, i) => {
@@ -1116,9 +1136,9 @@ export function drawLangPopup() {
     const selected = S.lang === lid;
     fillRR(r.x, r.y, r.w, r.h, 8, selected ? C("SPEED_ACTIVE") : C(colors[i]));
     strokeRR(r.x, r.y, r.w, r.h, 8, selected ? C("ACCENT") : C("PANEL_BORDER"), selected ? 2 : 1);
-    text(names[lid], 19, C("TEXT_MAIN"), r.x + r.w / 2, r.y + r.h / 2 + 1, { align: "center" });
+    text(names[lid], 19, C("TEXT_MAIN"), r.x + r.w / 2, r.y + r.h / 2, { align: "center", baseline: "middle" });
   });
-  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center" });
+  text(T("click_close"), 12, C("TEXT_DARK"), x + w / 2, y + h - 16, { align: "center", baseline: "middle" });
 }
 
 export function themePopupRect() {
@@ -1145,7 +1165,7 @@ export function drawThemePopup() {
   ctx.fillRect(0, 0, W, H);
   fillRR(p.x, p.y, p.w, p.h, 16, C("BG_MID"));
   strokeRR(p.x, p.y, p.w, p.h, 16, C("PANEL_BORDER"), 2);
-  text(T("theme"), 32, C("ACCENT"), p.x + p.w / 2, p.y + 28, { align: "center" });
+  text(T("theme"), 32, C("ACCENT"), p.x + p.w / 2, p.y + 28, { align: "center", baseline: "middle" });
   ctx.fillStyle = C("PANEL_BORDER");
   ctx.fillRect(p.x + 20, p.y + 55, p.w - 40, 1);
 
@@ -1167,9 +1187,87 @@ export function drawThemePopup() {
       while (tname.length > 1 && textWidth(tname + "...", 19) > maxW) tname = tname.slice(0, -1);
       tname += "...";
     }
-    text(tname, 19, C("TEXT_MAIN"), r.x + 157, pyCen, { align: "left" });
+    text(tname, 19, C("TEXT_MAIN"), r.x + 157, pyCen, { align: "left", baseline: "middle" });
   });
-  text(T("click_close"), 12, C("TEXT_DARK"), p.x + p.w / 2, p.y + p.h - 10, { align: "center" });
+  text(T("click_close"), 12, C("TEXT_DARK"), p.x + p.w / 2, p.y + p.h - 10, { align: "center", baseline: "middle" });
+}
+
+/* ============================================================
+   启动欢迎界面（展示本地存档的玩家数据）
+   ============================================================ */
+export function formatDuration(t) {
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  if (S.lang === "en") return h > 0 ? `${h}h${m}m${s}s` : `${m}m${s}s`;
+  return h > 0 ? `${h}时${m}分${s}秒` : `${m}分${s}秒`;
+}
+
+export function drawWelcome() {
+  /* 背景纹理（与主菜单一致） */
+  for (let i = 0; i < W; i += 60) {
+    ctx.fillStyle = rgb(S.colors.BG_LIGHT, 4 / 255);
+    ctx.fillRect(i, 0, 1, H);
+  }
+  /* 标题 */
+  text(T("title"), 54, "rgba(0,0,0,0.118)", W / 2 + 2, 94, { align: "center", baseline: "middle" });
+  text(T("title"), 54, C("ACCENT"), W / 2, 92, { align: "center", baseline: "middle" });
+  text(T("subtitle"), 19, C("TEXT_DIM"), W / 2, 140, { align: "center", baseline: "middle" });
+  const msg = S.stats.games_played > 0 ? T("welcome_back") : T("welcome_first");
+  text(msg, 24, C("TEXT_MAIN"), W / 2, 180, { align: "center", baseline: "middle" });
+
+  /* 数据面板 */
+  const pw = 640, ph = 350;
+  const px = Math.floor((W - pw) / 2), py = 212;
+  fillRR(px, py, pw, ph, 16, C("BG_MID"));
+  strokeRR(px, py, pw, ph, 16, C("PANEL_BORDER"), 2);
+  text(T("player_data"), 19, C("ACCENT"), px + pw / 2, py + 28, { align: "center", baseline: "middle" });
+  ctx.fillStyle = C("PANEL_BORDER");
+  ctx.fillRect(px + 30, py + 48, pw - 60, 1);
+
+  /* 段位 / 等级 / XP */
+  const [lvl, prog, need] = xpToLevel(S.stats.xp || 0);
+  const tier = getRankTier(lvl);
+  const streak = S.stats.xp_streak || 0;
+  const badgeX = px + 60, badgeY = py + 70;
+  fillRR(badgeX, badgeY, 110, 40, 8, rgb(tier.color));
+  text(T(tier.name_key), 19, "rgb(30,30,30)", badgeX + 55, badgeY + 20, { align: "center", baseline: "middle" });
+  text(`Lv.${lvl}`, 32, C("TEXT_MAIN"), badgeX + 55, badgeY + 66, { align: "center", baseline: "middle" });
+  if (streak > 0) {
+    text(T("rank_streak", streak), 14, C("GOLD"), badgeX + 55, badgeY + 96, { align: "center", baseline: "middle" });
+  }
+  const barX = px + pw / 2 - 10, barY = py + 82, barW = pw / 2 - 50, barH = 16;
+  fillRR(barX, barY, barW, barH, 8, C("VOLUME_TRACK"));
+  const fillW = Math.floor(barW * prog / Math.max(need, 1));
+  if (fillW > 0) fillRR(barX, barY, fillW, barH, 8, rgb(tier.color));
+  text(T("rank_progress", prog, need), 14, C("TEXT_DIM"), barX + barW / 2, barY + 32, { align: "center", baseline: "middle" });
+
+  ctx.fillStyle = C("PANEL_BORDER");
+  ctx.fillRect(px + 30, py + 186, pw - 60, 1);
+
+  /* 统计网格：2 行 × 4 列 */
+  const cells = [
+    [T("total_score"), String(Math.floor(S.stats.total_score / SCORE_SCALE))],
+    [T("games_played"), String(S.stats.games_played)],
+    [T("play_time"), formatDuration(S.stats.total_time)],
+    [T("achievements"), `${S.unlockedAchievements.size}/${ACHIEVEMENTS.length}`],
+    [T("max_endless"), fmtScore(S.stats.endless_high)],
+    [T("max_timed"), fmtScore(S.stats.timed_high)],
+    [T("vs_record"), `${S.stats.vs_wins || 0} / ${S.stats.vs_losses || 0}`],
+    [T("skin_collect"), `${S.unlockedSkins.length}/${SKINS.length}`],
+  ];
+  const cellW = (pw - 60) / 4, cellH = 62;
+  cells.forEach(([lb, vl], i) => {
+    const row = Math.floor(i / 4), col = i % 4;
+    const cx = px + 30 + col * cellW, cy = py + 200 + row * (cellH + 12);
+    fillRR(cx + 4, cy, cellW - 8, cellH, 10, C("PANEL_BG"));
+    strokeRR(cx + 4, cy, cellW - 8, cellH, 10, C("PANEL_BORDER"), 1);
+    text(lb, 12, C("TEXT_DIM"), cx + cellW / 2, cy + 18, { align: "center", baseline: "middle" });
+    text(vl, 19, C("TEXT_MAIN"), cx + cellW / 2, cy + 42, { align: "center", baseline: "middle" });
+  });
+
+  /* 底部呼吸提示 */
+  const alpha = 0.55 + 0.45 * Math.sin(performance.now() / 400);
+  text(T("click_continue"), 16, rgb(S.colors.TEXT_DIM, alpha), W / 2, py + ph - 18, { align: "center", baseline: "middle" });
+  text("v8.0", 12, C("TEXT_DARK"), W - 60, H - 18);
 }
 
 /* ============================================================

@@ -15,6 +15,7 @@ export function T(key, ...args) {
 
 /* ---------- 状态机常量 ---------- */
 export const ST = {
+  WELCOME: "welcome",
   MENU: "menu",
   PLAYING: "playing",
   PAUSED: "paused",
@@ -57,7 +58,7 @@ export const S = {
   theme: "default",
   colors: { ...DEFAULT_COLORS },   // 当前生效配色（applyTheme 时更新）
 
-  state: ST.MENU,
+  state: ST.WELCOME,
   popupType: null,        // shop / skin / music / help / dev / update / stats / achievements / daily_info
   paused: false,
   vsPaused: false,

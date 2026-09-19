@@ -18,6 +18,7 @@ import {
 import { VSGame } from "./vs.js";
 import {
   initUi, initButtons, updateMenuHover, B, applyCanvasTransform, clearCanvas,
+  drawWelcome,
   drawMenu, drawPlaying, drawVsPlaying, drawVsOver, drawGameOver,
   drawShopPopup, drawSkinPopup, drawMusicPopup, drawAchievements,
   drawScrollPopup, getStatLines, getPopupGeometry,
@@ -320,6 +321,10 @@ function onPointerDown(e) {
   mouse[0] = mx; mouse[1] = my;
 
   switch (S.state) {
+    case ST.WELCOME:
+      /* 点击任意位置进入主菜单 */
+      S.state = ST.MENU;
+      break;
     case ST.MENU: handleMenuClick(mx, my); break;
     case ST.DIFFICULTY_SELECT: {
       const rects = difficultyRects();
@@ -611,6 +616,14 @@ function onWheel(e) {
 function onKeyDown(e) {
   ensureMusic();
   const key = e.key;
+
+  /* 欢迎界面：任意键进入主菜单 */
+  if (S.state === ST.WELCOME) {
+    S.state = ST.MENU;
+    e.preventDefault();
+    return;
+  }
+
   const dirKeys = {
     ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
@@ -772,6 +785,7 @@ function render() {
   clearCanvas("BG_DARK");
 
   switch (S.state) {
+    case ST.WELCOME: drawWelcome(); break;
     case ST.MENU: drawMenu(); break;
     case ST.DIFFICULTY_SELECT: drawMenu(); drawDifficultyPopup(); break;
     case ST.LANG_SELECT: drawMenu(); drawLangPopup(); break;
@@ -834,6 +848,11 @@ function resize() {
   applyCanvasTransform(scale);
 }
 window.addEventListener("resize", resize);
+/* 优化：监听画布容器尺寸变化（窗口缩放 / 设备像素比变化 / 旋转屏幕），
+   确保任意尺寸下画面都按 880×720 逻辑坐标等比清晰渲染 */
+if (typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(resize).observe(canvas);
+}
 resize();
 
 canvas.addEventListener("pointerdown", onPointerDown);
